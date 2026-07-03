@@ -8,6 +8,7 @@
 pub mod alpha;
 pub mod dfg;
 pub mod inductive;
+pub mod stats;
 mod trace;
 pub mod variants;
 
@@ -17,4 +18,5 @@ mod test_util;
 pub use alpha::{alpha, PetriNet, Place};
 pub use dfg::{dfg, oc_dfg, Dfg, DfgEdge, DfgNode, OcActivity, OcDfg, OcDfgEdge, OcTypeCount};
 pub use inductive::{inductive, ProcessTree};
+pub use stats::{type_stats, TypeStats};
 pub use variants::{variants, Variant, VariantsReport};
