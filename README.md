@@ -13,8 +13,11 @@ live in [ocel-studio](https://github.com/katsut/ocel-studio).
 Shipped: per-type trace variants, per-type DFG (frequency / distinct objects /
 gap statistics, start-end counts), the OC-DFG overlay, and per-type model
 discovery — the **alpha algorithm** (educational; its textbook limits are
-returned as warnings) and the **basic inductive miner** (practical; sound by
-construction, flower fall-through). Metrics and IMf-style noise handling are next.
+returned as warnings), the **basic inductive miner** (practical; sound by
+construction, flower fall-through), and the **heuristics miner** (noise-robust;
+dependency graph with tunable thresholds, PM4Py-compatible 5% pre-cleaning,
+dedicated length-1/length-2 loop measures). IMf-style noise handling for the
+inductive miner is next.
 
 Discovery honesty notes: alpha cannot model self-loops and caps at 20
 activities. The basic inductive miner matches PM4Py exactly on structured
@@ -57,6 +60,7 @@ Official Zenodo [Order Management](https://zenodo.org/records/18373906) log
 | `dfg("items")` — 56 edges | **6.5 ms** | 34 ms |
 | `inductive("orders")` — tree identical to PM4Py | **4.0 ms** | 4 ms |
 | `inductive("items")` | 6.7 ms | 29 ms |
+| `heuristics("items")` — 21 edges identical to PM4Py | **6.9 ms** | 82 ms |
 | read the sqlite log | 60 ms | 420 ms |
 
 Variant counts, DFG edge frequencies, and start/end counts match PM4Py's
