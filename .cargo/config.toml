@@ -1,0 +1,4 @@
+# Linux (CI): mold linker for fast links. macOS default linker is fine.
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
