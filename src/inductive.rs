@@ -3,7 +3,13 @@
 //! Basic IM (Leemans): recursively detect exclusive / sequence / parallel /
 //! loop cuts on the sub-log's directly-follows graph and split the log; the
 //! fall-through is the flower model, so the result is always a sound tree.
-//! No noise filtering (`IMf`) yet.
+//!
+//! `noise_threshold > 0` adds `IMf`-style frequency filtering: at every
+//! recursion step, directly-follows edges below the fraction of their source
+//! activity's strongest outgoing edge are ignored, and start/end activities
+//! are filtered the same way relative to the strongest one. Cuts run on the
+//! filtered graph, splits on the full log, so the tree stays sound. This is
+//! the frequency filter of `IMf`, not the complete `IMf` fall-through set.
 
 use std::collections::HashMap;
 
@@ -35,49 +41,70 @@ type Log = HashMap<Vec<u16>, usize>;
 
 struct Miner<'a> {
     names: &'a [&'a str],
+    noise_threshold: f64,
 }
 
 /// Directly-follows abstraction of a sub-log.
 struct Graph {
     alphabet: Vec<u16>,
-    follows: HashMap<(u16, u16), bool>,
+    follows: HashMap<(u16, u16), usize>,
     starts: Vec<u16>,
     ends: Vec<u16>,
 }
 
+/// Keep the ids whose count reaches `noise` × the strongest count.
+// counts are far below 2^53, so the usize → f64 casts are exact
+#[allow(clippy::cast_precision_loss)]
+fn frequent(counts: &HashMap<u16, usize>, noise: f64) -> Vec<u16> {
+    let strongest = counts.values().copied().max().unwrap_or(0);
+    let mut kept: Vec<u16> = counts
+        .iter()
+        .filter(|&(_, &count)| count as f64 >= strongest as f64 * noise)
+        .map(|(&a, _)| a)
+        .collect();
+    kept.sort_unstable();
+    kept
+}
+
 impl Graph {
-    fn build(log: &Log) -> Graph {
-        let mut follows: HashMap<(u16, u16), bool> = HashMap::new();
+    fn build(log: &Log, noise_threshold: f64) -> Graph {
+        let mut follows: HashMap<(u16, u16), usize> = HashMap::new();
         let mut alphabet: Vec<u16> = Vec::new();
-        let mut starts: Vec<u16> = Vec::new();
-        let mut ends: Vec<u16> = Vec::new();
-        for sequence in log.keys() {
+        let mut start_counts: HashMap<u16, usize> = HashMap::new();
+        let mut end_counts: HashMap<u16, usize> = HashMap::new();
+        for (sequence, &count) in log {
             let (Some(&first), Some(&last)) = (sequence.first(), sequence.last()) else {
                 continue;
             };
-            if !starts.contains(&first) {
-                starts.push(first);
-            }
-            if !ends.contains(&last) {
-                ends.push(last);
-            }
+            *start_counts.entry(first).or_insert(0) += count;
+            *end_counts.entry(last).or_insert(0) += count;
             for &a in sequence {
                 if !alphabet.contains(&a) {
                     alphabet.push(a);
                 }
             }
             for pair in sequence.windows(2) {
-                follows.insert((pair[0], pair[1]), true);
+                *follows.entry((pair[0], pair[1])).or_insert(0) += count;
             }
         }
         alphabet.sort_unstable();
-        starts.sort_unstable();
-        ends.sort_unstable();
+        if noise_threshold > 0.0 {
+            let mut max_outgoing: HashMap<u16, usize> = HashMap::new();
+            for (&(a, _), &count) in &follows {
+                let strongest = max_outgoing.entry(a).or_insert(0);
+                *strongest = (*strongest).max(count);
+            }
+            // counts are far below 2^53, so the usize → f64 casts are exact
+            #[allow(clippy::cast_precision_loss)]
+            follows.retain(|&(a, _), &mut count| {
+                count as f64 >= max_outgoing[&a] as f64 * noise_threshold
+            });
+        }
         Graph {
             alphabet,
             follows,
-            starts,
-            ends,
+            starts: frequent(&start_counts, noise_threshold),
+            ends: frequent(&end_counts, noise_threshold),
         }
     }
 
@@ -135,7 +162,7 @@ impl Miner<'_> {
             };
         }
 
-        let graph = Graph::build(log);
+        let graph = Graph::build(log, self.noise_threshold);
         if graph.alphabet.len() == 1 {
             let activity = ProcessTree::Activity {
                 label: self.names[graph.alphabet[0] as usize].to_owned(),
@@ -161,6 +188,9 @@ impl Miner<'_> {
         if let Some(tree) = self.loop_cut(log, &graph) {
             return tree;
         }
+        if let Some(tree) = self.once_per_trace(log, &graph) {
+            return tree;
+        }
 
         // fall-through: the flower model
         let mut children = vec![ProcessTree::Tau];
@@ -168,6 +198,36 @@ impl Miner<'_> {
             label: self.names[a as usize].to_owned(),
         }));
         ProcessTree::Loop { children }
+    }
+
+    /// Fall-through before the flower: an activity occurring exactly once in
+    /// every trace runs concurrently to whatever the rest does. One activity
+    /// per pass (the alphabetically first, like `PM4Py`) so the cuts get
+    /// another chance on the remainder; nested parallels are flattened.
+    fn once_per_trace(&self, log: &Log, graph: &Graph) -> Option<ProcessTree> {
+        let mut candidates: Vec<u16> = graph.alphabet.clone();
+        for sequence in log.keys() {
+            candidates.retain(|&a| sequence.iter().filter(|&&x| x == a).count() == 1);
+            if candidates.is_empty() {
+                return None;
+            }
+        }
+        let chosen = candidates
+            .into_iter()
+            .min_by_key(|&a| self.names[a as usize])?;
+        let mut rest: Log = Log::new();
+        for (sequence, &count) in log {
+            let projected: Vec<u16> = sequence.iter().copied().filter(|&a| a != chosen).collect();
+            *rest.entry(projected).or_insert(0) += count;
+        }
+        let mut children = vec![ProcessTree::Activity {
+            label: self.names[chosen as usize].to_owned(),
+        }];
+        match self.mine(&rest) {
+            ProcessTree::Parallel { children: nested } => children.extend(nested),
+            other => children.push(other),
+        }
+        Some(ProcessTree::Parallel { children })
     }
 
     fn exclusive_cut(&self, log: &Log, graph: &Graph) -> Option<ProcessTree> {
@@ -178,8 +238,24 @@ impl Miner<'_> {
         }
         let mut parts: Vec<Log> = vec![Log::new(); k];
         for (sequence, &count) in log {
-            let part = component[&sequence[0]];
-            *parts[part].entry(sequence.clone()).or_insert(0) += count;
+            // majority component wins; under noise filtering a trace can
+            // touch several components — its foreign activities are noise
+            let mut votes = vec![0usize; k];
+            for &a in sequence {
+                votes[component[&a]] += 1;
+            }
+            let mut part = 0;
+            for (i, &v) in votes.iter().enumerate() {
+                if v > votes[part] {
+                    part = i;
+                }
+            }
+            let filtered: Vec<u16> = sequence
+                .iter()
+                .copied()
+                .filter(|a| component[a] == part)
+                .collect();
+            *parts[part].entry(filtered).or_insert(0) += count;
         }
         Some(ProcessTree::Exclusive {
             children: parts.iter().map(|p| self.mine(p)).collect(),
@@ -236,19 +312,40 @@ impl Miner<'_> {
         if k < 2 {
             return None;
         }
-        // every group needs a start and an end activity
-        for group in 0..k {
-            let has_start = graph.starts.iter().any(|s| component[s] == group);
-            let has_end = graph.ends.iter().any(|e| component[e] == group);
-            if !has_start || !has_end {
-                return None;
-            }
+        let mut groups: Vec<Vec<u16>> = vec![Vec::new(); k];
+        for &a in &graph.alphabet {
+            groups[component[&a]].push(a);
         }
-        let mut parts: Vec<Log> = vec![Log::new(); k];
+        // a group without a start or an end activity cannot stand alone;
+        // merge it into a neighbor instead of giving the cut up (all
+        // cross-component pairs are mutual, so the partition stays valid)
+        groups.sort_by_key(Vec::len);
+        let mut i = 0;
+        while i < groups.len() && groups.len() > 1 {
+            let has_start = groups[i].iter().any(|a| graph.starts.contains(a));
+            let has_end = groups[i].iter().any(|a| graph.ends.contains(a));
+            if has_start && has_end {
+                i += 1;
+                continue;
+            }
+            let group = groups.remove(i);
+            let target = i.saturating_sub(1);
+            groups[target].extend(group);
+        }
+        if groups.len() < 2 {
+            return None;
+        }
+
+        let index: HashMap<u16, usize> = groups
+            .iter()
+            .enumerate()
+            .flat_map(|(i, group)| group.iter().map(move |&a| (a, i)))
+            .collect();
+        let mut parts: Vec<Log> = vec![Log::new(); groups.len()];
         for (sequence, &count) in log {
-            let mut projections: Vec<Vec<u16>> = vec![Vec::new(); k];
+            let mut projections: Vec<Vec<u16>> = vec![Vec::new(); groups.len()];
             for &a in sequence {
-                projections[component[&a]].push(a);
+                projections[index[&a]].push(a);
             }
             for (i, projection) in projections.into_iter().enumerate() {
                 *parts[i].entry(projection).or_insert(0) += count;
@@ -366,11 +463,14 @@ fn reachability(graph: &Graph) -> HashMap<(u16, u16), bool> {
     out
 }
 
-/// Discover a process tree for `object_type` with the basic inductive miner.
+/// Discover a process tree for `object_type` with the inductive miner.
 ///
-/// Objects without events are ignored (they are not part of the process).
+/// `noise_threshold` of `0.0` is the exact basic miner; higher values (`IMf`
+/// territory is around `0.2`) ignore infrequent directly-follows edges so the
+/// mainstream structure survives noisy logs. Objects without events are
+/// ignored (they are not part of the process).
 #[must_use]
-pub fn inductive(log: &Ocel, object_type: &str) -> ProcessTree {
+pub fn inductive(log: &Ocel, object_type: &str, noise_threshold: f64) -> ProcessTree {
     let traces = trace::build(log, object_type);
     let mut variants: Log = HashMap::new();
     for steps in &traces.steps {
@@ -382,6 +482,7 @@ pub fn inductive(log: &Ocel, object_type: &str) -> ProcessTree {
     }
     let miner = Miner {
         names: &traces.activity_names,
+        noise_threshold,
     };
     miner.mine(&variants)
 }
@@ -400,7 +501,7 @@ mod tests {
     #[test]
     fn sequence_of_three() {
         let log = log_from_sequences(&[&["a", "b", "c"], &["a", "b", "c"]]);
-        let tree = inductive(&log, "case");
+        let tree = inductive(&log, "case", 0.0);
         assert_eq!(
             tree,
             ProcessTree::Sequence {
@@ -412,7 +513,7 @@ mod tests {
     #[test]
     fn exclusive_choice() {
         let log = log_from_sequences(&[&["a", "b"], &["c", "d"]]);
-        let tree = inductive(&log, "case");
+        let tree = inductive(&log, "case", 0.0);
         let ProcessTree::Exclusive { children } = tree else {
             panic!("expected exclusive root");
         };
@@ -422,7 +523,7 @@ mod tests {
     #[test]
     fn parallel_pair() {
         let log = log_from_sequences(&[&["a", "b"], &["b", "a"]]);
-        let tree = inductive(&log, "case");
+        let tree = inductive(&log, "case", 0.0);
         assert_eq!(
             tree,
             ProcessTree::Parallel {
@@ -434,7 +535,7 @@ mod tests {
     #[test]
     fn loop_with_redo() {
         let log = log_from_sequences(&[&["a"], &["a", "b", "a"], &["a", "b", "a", "b", "a"]]);
-        let tree = inductive(&log, "case");
+        let tree = inductive(&log, "case", 0.0);
         assert_eq!(
             tree,
             ProcessTree::Loop {
@@ -446,7 +547,7 @@ mod tests {
     #[test]
     fn optional_tail_becomes_xor_tau() {
         let log = log_from_sequences(&[&["a", "b"], &["a"]]);
-        let tree = inductive(&log, "case");
+        let tree = inductive(&log, "case", 0.0);
         assert_eq!(
             tree,
             ProcessTree::Sequence {
@@ -461,6 +562,53 @@ mod tests {
     }
 
     #[test]
+    fn once_per_trace_beats_the_flower() {
+        // no cut applies, but b happens exactly once per trace
+        let log = log_from_sequences(&[&["a", "b", "a"], &["a", "a", "b"]]);
+        let tree = inductive(&log, "case", 0.0);
+        assert_eq!(
+            tree,
+            ProcessTree::Parallel {
+                children: vec![
+                    activity("b"),
+                    ProcessTree::Loop {
+                        children: vec![activity("a"), ProcessTree::Tau]
+                    },
+                ]
+            }
+        );
+    }
+
+    #[test]
+    fn noise_threshold_ignores_rare_swap() {
+        // ten a,b,c and one b,a,c: the swap makes a and b look concurrent
+        let mut sequences: Vec<&[&str]> = vec![&["a", "b", "c"]; 10];
+        sequences.push(&["b", "a", "c"]);
+        let log = log_from_sequences(&sequences);
+
+        let noisy = inductive(&log, "case", 0.0);
+        assert_eq!(
+            noisy,
+            ProcessTree::Sequence {
+                children: vec![
+                    ProcessTree::Parallel {
+                        children: vec![activity("a"), activity("b")]
+                    },
+                    activity("c"),
+                ]
+            }
+        );
+        // with filtering, the rare b->a edge and the rare start b are ignored
+        let filtered = inductive(&log, "case", 0.2);
+        assert_eq!(
+            filtered,
+            ProcessTree::Sequence {
+                children: vec![activity("a"), activity("b"), activity("c")]
+            }
+        );
+    }
+
+    #[test]
     fn textbook_l1_structure() {
         let log = log_from_sequences(&[
             &["a", "b", "c", "d"],
@@ -470,7 +618,7 @@ mod tests {
             &["a", "c", "b", "d"],
             &["a", "e", "d"],
         ]);
-        let tree = inductive(&log, "case");
+        let tree = inductive(&log, "case", 0.0);
         assert_eq!(
             tree,
             ProcessTree::Sequence {

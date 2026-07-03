@@ -1,6 +1,6 @@
 //! Discover a process tree with the inductive miner and print it.
 //!
-//! Usage: `cargo run --release --example inductive -- <log> <object_type>`
+//! Usage: `cargo run --release --example inductive -- <log> <object_type> [noise_threshold]`
 
 use std::time::Instant;
 
@@ -34,12 +34,13 @@ fn print_children(head: &str, children: &[ProcessTree], indent: usize) {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let (Some(path), Some(object_type)) = (args.next(), args.next()) else {
-        return Err("usage: inductive <log> <object_type>".into());
+        return Err("usage: inductive <log> <object_type> [noise_threshold]".into());
     };
+    let noise_threshold: f64 = args.next().map_or(Ok(0.0), |s| s.parse())?;
 
     let log = ocel::io::read_path(&path)?;
     let start = Instant::now();
-    let tree = ocel_mine::inductive(&log, &object_type);
+    let tree = ocel_mine::inductive(&log, &object_type, noise_threshold);
     let elapsed = start.elapsed();
 
     print_tree(&tree, 0);
