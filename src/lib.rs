@@ -6,6 +6,7 @@
 //! instead of flattening the log (see `docs/adr/0001-scope-and-semantics.md`).
 
 pub mod alpha;
+pub mod cases;
 pub mod dfg;
 pub mod inductive;
 pub mod metrics;
@@ -17,6 +18,7 @@ pub mod variants;
 mod test_util;
 
 pub use alpha::{alpha, PetriNet, Place};
+pub use cases::{cases, CaseSummary};
 pub use dfg::{dfg, oc_dfg, Dfg, DfgEdge, DfgNode, OcActivity, OcDfg, OcDfgEdge, OcTypeCount};
 pub use inductive::{inductive, ProcessTree};
 pub use metrics::{lead_times, LeadTimeReport, ReworkMetric, VariantLead};
