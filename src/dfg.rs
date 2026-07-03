@@ -282,7 +282,7 @@ pub fn oc_dfg(log: &Ocel, object_types: &[&str]) -> OcDfg {
             .cmp(&a.events)
             .then_with(|| a.activity.cmp(&b.activity))
     });
-    edges.sort_unstable_by(|a, b| b.edge.frequency.cmp(&a.edge.frequency));
+    edges.sort_unstable_by_key(|e| std::cmp::Reverse(e.edge.frequency));
 
     OcDfg {
         object_types: object_types.iter().map(|&t| t.to_owned()).collect(),
