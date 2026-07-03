@@ -234,6 +234,7 @@ dependencies = [
 name = "ocel-mine"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "ocel",
  "serde",
 ]

@@ -10,7 +10,39 @@ live in [ocel-studio](https://github.com/katsut/ocel-studio).
 
 ## Status
 
-Bootstrap. First analysis (per-type trace variants) is under construction.
+First analysis shipped: per-type trace variants. DFG / OC-DFG / metrics are next.
+
+## Quickstart
+
+```rust
+let log = ocel::io::read_path("order-management.sqlite")?;
+let report = ocel_mine::variants(&log, "orders");
+for v in report.variants.iter().take(5) {
+    println!("{:>6}  {}", v.count, v.activities.join(" -> "));
+}
+```
+
+Or from the command line:
+
+```sh
+cargo run --release --example variants -- order-management.sqlite orders
+```
+
+## Performance
+
+Official Zenodo [Order Management](https://zenodo.org/records/18373906) log
+(21,008 events), Apple Silicon laptop, single run, warm cache:
+
+| | ocel-mine | PM4Py 2.x (flatten + pandas groupby) |
+|---|---|---|
+| `variants("orders")` — 2,000 traces, 5 variants | **3.7 ms** | 24 ms |
+| `variants("items")` — 7,659 traces, 286 variants | **5.4 ms** | 91 ms |
+| read the sqlite log | 60 ms | 420 ms |
+
+Variant counts match PM4Py's flattening exactly on both types. Note when
+reproducing the PM4Py side: compute variants from the flattened DataFrame with an
+explicit per-case timestamp sort + groupby — `pm4py.get_variants(df)` applied
+directly to a flattened OCEL frame returns scrambled sequences.
 
 ## Semantics
 
