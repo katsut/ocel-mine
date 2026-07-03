@@ -13,17 +13,20 @@ live in [ocel-studio](https://github.com/katsut/ocel-studio).
 Shipped: per-type trace variants, per-type DFG (frequency / distinct objects /
 gap statistics, start-end counts), the OC-DFG overlay, and per-type model
 discovery — the **alpha algorithm** (educational; its textbook limits are
-returned as warnings), the **basic inductive miner** (practical; sound by
-construction, flower fall-through), and the **heuristics miner** (noise-robust;
+returned as warnings), the **inductive miner** (practical; sound by
+construction, once-per-trace fall-through before the flower, tunable
+`IMf`-style noise threshold), and the **heuristics miner** (noise-robust;
 dependency graph with tunable thresholds, PM4Py-compatible 5% pre-cleaning,
-dedicated length-1/length-2 loop measures). IMf-style noise handling for the
-inductive miner is next.
+dedicated length-1/length-2 loop measures).
 
 Discovery honesty notes: alpha cannot model self-loops and caps at 20
-activities. The basic inductive miner matches PM4Py exactly on structured
-logs (e.g. the orders type below); on heavily interleaved types (items) it
-falls through to a flower where PM4Py's IMf variant finds further concurrent
-cuts — a known gap, tracked as follow-up.
+activities. The inductive miner matches PM4Py exactly on structured logs
+(e.g. the orders type below, at any noise level); on heavily interleaved
+types (items) the trees agree up to how optional stages nest (ours marks the
+out-of-stock pair optional per activity, PM4Py per pair — both sound). The
+noise threshold implements the `IMf` frequency filter (edges below the
+fraction of the source's strongest outgoing edge are ignored at every
+recursion step), not the complete `IMf` fall-through set.
 
 ## Quickstart
 
