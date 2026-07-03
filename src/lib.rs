@@ -5,6 +5,9 @@
 //! object's events ordered by time; cross-type views overlay per-type results
 //! instead of flattening the log (see `docs/adr/0001-scope-and-semantics.md`).
 
+pub mod dfg;
+mod trace;
 pub mod variants;
 
+pub use dfg::{dfg, oc_dfg, Dfg, DfgEdge, DfgNode, OcActivity, OcDfg, OcDfgEdge, OcTypeCount};
 pub use variants::{variants, Variant, VariantsReport};

@@ -10,10 +10,8 @@ categories = ["science", "data-structures"]
 
 [dependencies]
 ocel = "0.1.3"
-serde = { version = "1", features = ["derive"] }
-
-[dev-dependencies]
 chrono = "0.4"
+serde = { version = "1", features = ["derive"] }
 
 [lints.rust]
 unsafe_code = "forbid"

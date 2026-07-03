@@ -14,6 +14,8 @@ use std::collections::HashMap;
 use ocel::Ocel;
 use serde::Serialize;
 
+use crate::trace;
+
 /// One activity sequence and how many objects of the type follow it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Variant {
@@ -45,65 +47,22 @@ pub struct VariantsReport {
 /// result deterministic.
 #[must_use]
 pub fn variants(log: &Ocel, object_type: &str) -> VariantsReport {
-    // Slot per object of the requested type.
-    let mut slot_of: HashMap<&str, usize> = HashMap::new();
-    let mut object_ids: Vec<&str> = Vec::new();
-    for object in &log.objects {
-        if object.object_type == object_type {
-            slot_of.entry(object.id.as_str()).or_insert_with(|| {
-                object_ids.push(object.id.as_str());
-                object_ids.len() - 1
-            });
-        }
-    }
+    let traces = trace::build(log, object_type);
+    let sequences: Vec<Vec<u16>> = traces
+        .steps
+        .iter()
+        .map(|steps| steps.iter().map(|&(activity, _)| activity).collect())
+        .collect();
 
-    // One global time order instead of a sort per trace.
-    let mut order: Vec<usize> = (0..log.events.len()).collect();
-    order.sort_unstable_by_key(|&i| (log.events[i].time, i));
-
-    // Interned activity ids keep the sequences small and cheap to hash.
-    let mut activity_ids: HashMap<&str, u16> = HashMap::new();
-    let mut activity_names: Vec<&str> = Vec::new();
-
-    let mut traces: Vec<Vec<u16>> = vec![Vec::new(); object_ids.len()];
-    let mut last_event: Vec<usize> = vec![usize::MAX; object_ids.len()];
-    for &event_index in &order {
-        let event = &log.events[event_index];
-        let mut interned: Option<u16> = None;
-        for relation in &event.relationships {
-            let Some(&slot) = slot_of.get(relation.object_id.as_str()) else {
-                continue;
-            };
-            if last_event[slot] == event_index {
-                continue; // second qualifier of the same event
-            }
-            last_event[slot] = event_index;
-            let activity = if let Some(id) = interned {
-                id
-            } else {
-                let id = *activity_ids
-                    .entry(event.event_type.as_str())
-                    .or_insert_with(|| {
-                        activity_names.push(event.event_type.as_str());
-                        u16::try_from(activity_names.len() - 1)
-                            .expect("more than u16::MAX event types")
-                    });
-                interned = Some(id);
-                id
-            };
-            traces[slot].push(activity);
-        }
-    }
-
-    // Group identical sequences; keys borrow the trace buffers.
+    // Group identical sequences; keys borrow the sequence buffers.
     let mut groups: HashMap<&[u16], (usize, usize)> = HashMap::new();
     let mut with_events = 0usize;
-    for (slot, trace) in traces.iter().enumerate() {
-        if trace.is_empty() {
+    for (slot, sequence) in sequences.iter().enumerate() {
+        if sequence.is_empty() {
             continue;
         }
         with_events += 1;
-        let entry = groups.entry(trace.as_slice()).or_insert((0, slot));
+        let entry = groups.entry(sequence.as_slice()).or_insert((0, slot));
         entry.0 += 1;
     }
 
@@ -112,10 +71,10 @@ pub fn variants(log: &Ocel, object_type: &str) -> VariantsReport {
         .map(|(sequence, (count, example_slot))| Variant {
             activities: sequence
                 .iter()
-                .map(|&id| activity_names[id as usize].to_owned())
+                .map(|&id| traces.activity_names[id as usize].to_owned())
                 .collect(),
             count,
-            example: object_ids[example_slot].to_owned(),
+            example: traces.object_ids[example_slot].to_owned(),
         })
         .collect();
     variants.sort_unstable_by(|a, b| {
@@ -126,7 +85,7 @@ pub fn variants(log: &Ocel, object_type: &str) -> VariantsReport {
 
     VariantsReport {
         object_type: object_type.to_owned(),
-        objects: object_ids.len(),
+        objects: traces.object_ids.len(),
         with_events,
         variants,
     }
