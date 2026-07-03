@@ -26,9 +26,21 @@ per-trace sorts. Claims are backed by timings on public datasets.
 
 In: per-type trace variants, per-type DFG (frequency and duration annotations),
 OC-DFG (per-type edges overlaid, object-count annotations), and process metrics
-(lead time distributions, activity dwell, rework loops). Out (for now): process
-model discovery (inductive miner, OC Petri nets) and alignment-based conformance
-checking. The API must not block adding them later.
+(lead time distributions, activity dwell, rework loops).
+
+**Discovery tier (amended 2026-07-03):** per-type process model discovery is in
+scope, phased:
+
+- **Alpha algorithm** — the educational milestone. Its textbook limits are real
+  and must be surfaced, not hidden: it cannot model length-1 loops (self-loops,
+  which our own demo data contains), struggles with length-2 loops, and has no
+  noise tolerance. Results carry explicit warnings.
+- **Inductive Miner** — the practical line: recursive cut detection over the
+  DFG with a soundness guarantee and a flower-model fall-through, producing a
+  process tree.
+
+Still out: alignment-based conformance checking and cross-type (OC) Petri net
+composition. The API must not block adding them later.
 
 ### 2. Per-type semantics
 
