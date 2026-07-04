@@ -46,9 +46,12 @@ fn extend_independent(
     out: &mut Vec<Vec<u16>>,
 ) {
     for next in from..n {
-        if current
-            .iter()
-            .all(|&a| independent[a as usize][next] && independent[next][a as usize])
+        // ∀ a1, a2 ∈ A: a1 # a2 — including a1 = a2, so a self-looping
+        // activity can never join a place (its transition stays disconnected)
+        if independent[next][next]
+            && current
+                .iter()
+                .all(|&a| independent[a as usize][next] && independent[next][a as usize])
         {
             current.push(u16::try_from(next).expect("checked size"));
             out.push(current.clone());
@@ -267,10 +270,17 @@ mod tests {
     }
 
     #[test]
-    fn self_loops_produce_warnings() {
+    fn self_loops_produce_warnings_and_disconnect() {
         let log = log_from_sequences(&[&["a", "b", "b", "c"]]);
         let net = alpha(&log, "case");
         assert!(net.warnings.iter().any(|w| w.contains("'b'")));
+        // ∀ a1,a2 ∈ A: a1 # a2 fails for b (b > b), so no place touches it —
+        // the transition stays disconnected, exactly like the textbook and
+        // PM4Py
+        assert!(net
+            .places
+            .iter()
+            .all(|p| !p.inputs.contains(&"b".to_owned()) && !p.outputs.contains(&"b".to_owned())));
     }
 
     #[test]
