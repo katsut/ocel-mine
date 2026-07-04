@@ -82,6 +82,11 @@ pub struct HeuristicsNet {
     pub activities: Vec<HeuristicActivity>,
     /// Edges sorted by descending frequency, ties by (from, to).
     pub edges: Vec<HeuristicEdge>,
+    /// Observed direct successions the kept edges explain (the graph is not
+    /// replayable, so coverage is its honest fitness stand-in).
+    pub covered_successions: usize,
+    /// All observed direct successions, before any cleaning.
+    pub total_successions: usize,
 }
 
 // Succession counts of realistic logs are far below 2^53, so the usize → f64
@@ -167,6 +172,7 @@ pub fn heuristics(log: &Ocel, object_type: &str, params: &HeuristicsParams) -> H
     let n = traces.activity_names.len();
 
     let mut t = tally(&traces.steps, n);
+    let total_successions: usize = t.succession.values().sum();
     if params.dfg_noise_threshold > 0.0 {
         t.pre_clean(params.dfg_noise_threshold);
     }
@@ -256,12 +262,15 @@ pub fn heuristics(log: &Ocel, object_type: &str, params: &HeuristicsParams) -> H
             .then_with(|| a.activity.cmp(&b.activity))
     });
 
+    let covered_successions = edges.iter().map(|e| e.frequency).sum();
     HeuristicsNet {
         object_type: object_type.to_owned(),
         objects: traces.object_ids.len(),
         with_events,
         activities,
         edges,
+        covered_successions,
+        total_successions,
     }
 }
 
@@ -298,6 +307,8 @@ mod tests {
         // a -> c has dependency 1/2 < 0.6
         assert!(edge(&net, "a", "c").is_none());
         assert_eq!(net.edges.len(), 2);
+        // coverage counts against the raw successions: ab 4 + bc 4 of 9
+        assert_eq!((net.covered_successions, net.total_successions), (8, 9));
 
         let a = net.activities.iter().find(|x| x.activity == "a").unwrap();
         assert_eq!((a.frequency, a.starts, a.ends), (5, 5, 0));

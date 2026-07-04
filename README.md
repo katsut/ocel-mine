@@ -11,22 +11,29 @@ live in [ocel-studio](https://github.com/katsut/ocel-studio).
 ## Status
 
 Shipped: per-type trace variants, per-type DFG (frequency / distinct objects /
-gap statistics, start-end counts), the OC-DFG overlay, and per-type model
+gap statistics, start-end counts), the OC-DFG overlay, per-type model
 discovery — the **alpha algorithm** (educational; its textbook limits are
 returned as warnings), the **inductive miner** (practical; sound by
 construction, once-per-trace fall-through before the flower, tunable
 `IMf`-style noise threshold), and the **heuristics miner** (noise-robust;
 dependency graph with tunable thresholds, PM4Py-compatible 5% pre-cleaning,
-dedicated length-1/length-2 loop measures).
+dedicated length-1/length-2 loop measures) — and **replay fitness**:
+`tree_replay` decides exact language membership per variant (the miner's cuts
+partition the alphabet, so membership is ownership routing, not a token-game
+approximation), `net_replay` token-replays alpha nets, and the heuristics net
+reports how many observed direct successions its kept edges explain.
 
-Discovery honesty notes: alpha cannot model self-loops and caps at 20
-activities. The inductive miner matches PM4Py exactly on structured logs
-(e.g. the orders type below, at any noise level); on heavily interleaved
-types (items) the trees agree up to how optional stages nest (ours marks the
-out-of-stock pair optional per activity, PM4Py per pair — both sound). The
-noise threshold implements the `IMf` frequency filter (edges below the
-fraction of the source's strongest outgoing edge are ignored at every
-recursion step), not the complete `IMf` fall-through set.
+Discovery honesty notes: alpha cannot model self-loops (a self-looping
+activity joins no place and its transition fires freely — textbook behavior)
+and caps at 20 activities. The inductive miner matches PM4Py exactly on
+structured logs (e.g. the orders type below, at any noise level); on heavily
+interleaved types (items) the trees agree up to how optional stages nest
+(ours marks the out-of-stock pair optional per activity, PM4Py per pair —
+both sound). The noise threshold implements the `IMf` frequency filter (edges
+below the fraction of the source's strongest outgoing edge are ignored at
+every recursion step), not the complete `IMf` fall-through set. Read fitness
+together with simplicity: the basic miner fits 100% at noise 0 by
+construction, and a flower replays anything over its alphabet.
 
 ## Quickstart
 
@@ -64,7 +71,13 @@ Official Zenodo [Order Management](https://zenodo.org/records/18373906) log
 | `inductive("orders")` — tree identical to PM4Py | **4.0 ms** | 4 ms |
 | `inductive("items")` | 6.7 ms | 29 ms |
 | `heuristics("items")` — 21 edges identical to PM4Py | **6.9 ms** | 82 ms |
+| `inductive` + `tree_replay("items")` | **11 ms** | 1s+ (convert + token replay) |
 | read the sqlite log | 60 ms | 420 ms |
+
+Replay percentages match `pm4py.fitness_token_based_replay` exactly on
+orders and items at noise 0.0 and 0.2 (100 / 100 / 100 / 95.40%) and on the
+alpha net; validating this uncovered and fixed an alpha bug (independent
+sets must require `a # a`, so self-looping activities join no place).
 
 Variant counts, DFG edge frequencies, and start/end counts match PM4Py's
 flattening exactly on both types. Note when reproducing the PM4Py variants:
