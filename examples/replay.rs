@@ -45,22 +45,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let log = ocel::io::read_path(&path)?;
     let start = Instant::now();
-    let report = match algo.as_str() {
+    let (report, precision) = match algo.as_str() {
         "inductive" => {
             let tree = ocel_mine::inductive(&log, &object_type, noise);
             println!("tree: {}", pm4py_notation(&tree));
-            ocel_mine::tree_replay(&log, &object_type, &tree)
+            (
+                ocel_mine::tree_replay(&log, &object_type, &tree),
+                ocel_mine::tree_precision(&log, &object_type, &tree),
+            )
         }
         "alpha" => {
             let net = ocel_mine::alpha(&log, &object_type);
             for warning in &net.warnings {
                 println!("warning: {warning}");
             }
-            ocel_mine::net_replay(&log, &object_type, &net)
+            (
+                ocel_mine::net_replay(&log, &object_type, &net),
+                ocel_mine::net_precision(&log, &object_type, &net),
+            )
         }
         other => return Err(format!("unknown algo: {other}").into()),
     };
     let elapsed = start.elapsed();
+    println!(
+        "precision: {:.6} (allowed {}, escaping {}, truncated traces {})",
+        precision.precision, precision.allowed, precision.escaping, precision.truncated_traces
+    );
 
     // trace counts are far below 2^53, so the f64 percentage is exact enough
     #[allow(clippy::cast_precision_loss)]

@@ -111,7 +111,7 @@ fn report(
 }
 
 /// The compiled tree: interned labels, per-node ownership routing.
-struct Compiled {
+pub(crate) struct Compiled {
     kinds: Vec<Kind>,
     nullable: Vec<bool>,
     /// Per node: symbol -> index of the child owning it (empty for leaves).
@@ -127,7 +127,7 @@ enum Kind {
     Loop(Vec<usize>),
 }
 
-fn compile(
+pub(crate) fn compile(
     tree: &ProcessTree,
     intern: &mut HashMap<String, u16>,
     out: &mut Compiled,
@@ -177,7 +177,15 @@ fn compile(
 }
 
 impl Compiled {
-    fn accepts(&self, node: usize, w: &[u16]) -> bool {
+    pub(crate) fn new() -> Self {
+        Self {
+            kinds: Vec::new(),
+            nullable: Vec::new(),
+            owner: Vec::new(),
+        }
+    }
+
+    pub(crate) fn accepts(&self, node: usize, w: &[u16]) -> bool {
         match &self.kinds[node] {
             Kind::Activity(id) => w.len() == 1 && w[0] == *id,
             Kind::Tau => w.is_empty(),
@@ -245,6 +253,12 @@ impl Compiled {
     /// after a body instance"; instances only span symbols their part owns,
     /// so the search is bounded by ownership runs.
     fn accepts_loop(&self, node: usize, children: &[usize], w: &[u16]) -> bool {
+        self.loop_reach(node, children, w)[w.len()]
+    }
+
+    /// `reach[j]` = `w[..j]` parses as `body (redo body)*`, i.e. ends exactly
+    /// after a complete body instance.
+    fn loop_reach(&self, node: usize, children: &[usize], w: &[u16]) -> Vec<bool> {
         let owner = &self.owner[node];
         let body = children[0];
         let n = w.len();
@@ -267,9 +281,6 @@ impl Compiled {
             }
         }
         while let Some(j) = queue.pop() {
-            if reach[n] {
-                break;
-            }
             // an empty redo (some redo part accepts ε) allows another body
             if redo_nullable {
                 for m in j + 1..=body_run(j) {
@@ -305,7 +316,116 @@ impl Compiled {
                 }
             }
         }
-        reach[n]
+        reach
+    }
+
+    /// Is `w` a prefix of some word in the node's language? Every node's
+    /// language is non-empty, so the empty sequence is always a prefix.
+    pub(crate) fn prefix_ok(&self, node: usize, w: &[u16]) -> bool {
+        if w.is_empty() {
+            return true;
+        }
+        match &self.kinds[node] {
+            Kind::Activity(id) => w.len() == 1 && w[0] == *id,
+            Kind::Tau => false, // non-empty prefix of ε cannot exist
+            Kind::Exclusive(children) => {
+                let owner = &self.owner[node];
+                let Some(&child) = owner.get(&w[0]) else {
+                    return false;
+                };
+                if w.iter().any(|s| owner.get(s) != Some(&child)) {
+                    return false;
+                }
+                self.prefix_ok(children[child], w)
+            }
+            Kind::Sequence(children) => {
+                let owner = &self.owner[node];
+                let mut current = 0usize;
+                let mut start = 0usize;
+                for (i, s) in w.iter().enumerate() {
+                    let Some(&child) = owner.get(s) else {
+                        return false;
+                    };
+                    if child < current {
+                        return false;
+                    }
+                    if child > current {
+                        // a passed child's segment must be a complete word
+                        if !self.accepts(children[current], &w[start..i]) {
+                            return false;
+                        }
+                        if (current + 1..child).any(|skip| !self.nullable[children[skip]]) {
+                            return false;
+                        }
+                        current = child;
+                        start = i;
+                    }
+                }
+                // the active child's segment only needs to be extendable;
+                // later children impose nothing on a prefix
+                self.prefix_ok(children[current], &w[start..])
+            }
+            Kind::Parallel(children) => {
+                // any interleaving of the children's remainders can follow,
+                // so each projection just has to be a prefix for its child
+                let owner = &self.owner[node];
+                let mut parts: Vec<Vec<u16>> = vec![Vec::new(); children.len()];
+                for &s in w {
+                    let Some(&child) = owner.get(&s) else {
+                        return false;
+                    };
+                    parts[child].push(s);
+                }
+                children
+                    .iter()
+                    .zip(&parts)
+                    .all(|(&c, part)| self.prefix_ok(c, part))
+            }
+            Kind::Loop(children) => self.prefix_loop(node, children, w),
+        }
+    }
+
+    /// Prefixes of `body (redo body)*`: a partial first body, or — after any
+    /// complete-body point — a partial redo, or a complete redo followed by
+    /// a partial body.
+    fn prefix_loop(&self, node: usize, children: &[usize], w: &[u16]) -> bool {
+        let body = children[0];
+        if self.prefix_ok(body, w) {
+            return true;
+        }
+        let owner = &self.owner[node];
+        let n = w.len();
+        let redo_nullable = children[1..].iter().any(|&c| self.nullable[c]);
+        let reach = self.loop_reach(node, children, w);
+        if reach[n] {
+            return true; // a full word is a prefix of itself
+        }
+        for j in (0..n).filter(|&j| reach[j]) {
+            if redo_nullable && self.prefix_ok(body, &w[j..]) {
+                return true;
+            }
+            let Some(&child) = owner.get(&w[j]) else {
+                continue;
+            };
+            if child == 0 {
+                continue;
+            }
+            // partial redo consuming the rest of w
+            if self.prefix_ok(children[child], &w[j..]) {
+                return true;
+            }
+            // complete redo, then a partial body
+            let mut end = j;
+            while end < n && owner.get(&w[end]) == Some(&child) {
+                end += 1;
+            }
+            for k in j + 1..=end {
+                if self.accepts(children[child], &w[j..k]) && self.prefix_ok(body, &w[k..]) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 
