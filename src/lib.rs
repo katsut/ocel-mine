@@ -11,6 +11,7 @@ pub mod dfg;
 pub mod heuristics;
 pub mod inductive;
 pub mod metrics;
+pub mod precision;
 pub mod replay;
 pub mod stats;
 mod trace;
@@ -27,6 +28,7 @@ pub use heuristics::{
 };
 pub use inductive::{inductive, ProcessTree};
 pub use metrics::{lead_times, LeadTimeReport, ReworkMetric, VariantLead};
+pub use precision::{net_precision, tree_precision, PrecisionReport};
 pub use replay::{net_replay, tree_replay, MisfitVariant, ReplayReport};
 pub use stats::{type_stats, TypeStats};
 pub use variants::{variants, Variant, VariantsReport};
