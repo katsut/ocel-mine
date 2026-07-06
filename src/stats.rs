@@ -20,11 +20,21 @@ pub struct TypeStats {
     pub with_events: usize,
     /// Median trace length over objects with events (0 when none).
     pub median_trace_len: f64,
+    /// Median first→last event span (seconds) over objects with at least two
+    /// events; 0 when none.
+    pub median_active_span_secs: f64,
+    /// Distinct activities appearing in this type's traces. Cross-cutting
+    /// participants (actors, reference masters) touch (nearly) every
+    /// activity in the log; a case notion selects the coherent subset that
+    /// is its lifecycle — compare against the log's activity count to tell
+    /// them apart.
+    pub activity_types: usize,
 }
 
-// Trace lengths are small integers; the i64 → f64 midpoint math is exact.
+// Trace lengths and second counts are far below 2^53; the midpoint math is
+// exact enough.
 #[allow(clippy::cast_precision_loss)]
-fn median(sorted: &[usize]) -> f64 {
+fn median(sorted: &[i64]) -> f64 {
     let n = sorted.len();
     if n == 0 {
         return 0.0;
@@ -51,18 +61,38 @@ pub fn type_stats(log: &Ocel) -> Vec<TypeStats> {
         .iter()
         .map(|&name| {
             let traces = trace::build(log, name);
-            let mut lengths: Vec<usize> = traces
+            let mut lengths: Vec<i64> = traces
                 .steps
                 .iter()
                 .map(Vec::len)
                 .filter(|&len| len > 0)
+                .map(|len| i64::try_from(len).expect("trace length fits i64"))
                 .collect();
             lengths.sort_unstable();
+            let mut spans: Vec<i64> = traces
+                .steps
+                .iter()
+                .filter(|steps| steps.len() >= 2)
+                .map(|steps| {
+                    let first = steps[0].1;
+                    let last = steps[steps.len() - 1].1;
+                    (last - first).num_seconds()
+                })
+                .collect();
+            spans.sort_unstable();
+            let mut seen: Vec<bool> = vec![false; traces.activity_names.len()];
+            for steps in &traces.steps {
+                for &(activity, _) in steps {
+                    seen[usize::from(activity)] = true;
+                }
+            }
             TypeStats {
                 object_type: name.to_owned(),
                 objects: traces.object_ids.len(),
                 with_events: lengths.len(),
                 median_trace_len: median(&lengths),
+                median_active_span_secs: median(&spans),
+                activity_types: seen.iter().filter(|&&s| s).count(),
             }
         })
         .collect();
@@ -81,13 +111,32 @@ mod tests {
 
     #[test]
     fn medians_and_coverage() {
-        // traces of length 2, 3, 4 -> median 3
+        // traces of length 2, 3, 4 -> median 3; events are 1min apart, so
+        // the active spans are 60, 120, 180 seconds -> median 120
         let log = log_from_sequences(&[&["a", "b"], &["a", "b", "c"], &["a", "b", "c", "d"]]);
         let stats = type_stats(&log);
         let case = stats.iter().find(|s| s.object_type == "case").unwrap();
         assert_eq!(case.objects, 3);
         assert_eq!(case.with_events, 3);
         assert!((case.median_trace_len - 3.0).abs() < f64::EPSILON);
+        assert!((case.median_active_span_secs - 120.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn single_event_objects_do_not_drag_the_span_down() {
+        // many one-event objects (span undefined) around one long-lived one
+        let log = log_from_sequences(&[&["a"], &["a"], &["a"], &["a", "b", "c", "d", "e"]]);
+        let stats = type_stats(&log);
+        let case = stats.iter().find(|s| s.object_type == "case").unwrap();
+        assert!((case.median_active_span_secs - 240.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn activity_alphabet_counts_distinct_activities_across_traces() {
+        let log = log_from_sequences(&[&["a", "b"], &["c"], &["a"]]);
+        let stats = type_stats(&log);
+        let case = stats.iter().find(|s| s.object_type == "case").unwrap();
+        assert_eq!(case.activity_types, 3);
     }
 
     #[test]
