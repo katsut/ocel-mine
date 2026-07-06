@@ -43,15 +43,15 @@ pub struct PrecisionReport {
 }
 
 /// One visited prefix state: how often, and what followed in the log.
-struct State {
-    visits: usize,
-    observed: Vec<bool>,
+pub(crate) struct State {
+    pub(crate) visits: usize,
+    pub(crate) observed: Vec<bool>,
 }
 
 /// Walk every trace, recording each valid prefix state (before each event)
 /// with its visit count and observed next activities. `valid` decides how far
 /// a trace keeps contributing.
-fn visit_states(
+pub(crate) fn visit_states(
     sequences: &[(Vec<u16>, usize)],
     activities: usize,
     valid: impl Fn(&[u16]) -> bool,
@@ -84,7 +84,7 @@ fn visit_states(
 /// the count of allowed model moves outside it (never observed by
 /// definition, so always escaping) — enabled transitions the log never
 /// exercises still widen the model, exactly as in `PM4Py`'s measure.
-fn score(
+pub(crate) fn score(
     object_type: &str,
     states: &HashMap<Vec<u16>, State>,
     truncated_traces: usize,
@@ -124,7 +124,7 @@ fn ratio(num: usize, den: usize) -> f64 {
     num as f64 / den as f64
 }
 
-fn sequences_of(traces: &trace::Traces<'_>) -> Vec<(Vec<u16>, usize)> {
+pub(crate) fn sequences_of(traces: &trace::Traces<'_>) -> Vec<(Vec<u16>, usize)> {
     let mut index: HashMap<Vec<u16>, usize> = HashMap::new();
     let mut sequences: Vec<(Vec<u16>, usize)> = Vec::new();
     for steps in &traces.steps {
