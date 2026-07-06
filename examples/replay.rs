@@ -39,7 +39,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let (Some(path), Some(object_type), Some(algo)) = (args.next(), args.next(), args.next())
     else {
-        return Err("usage: replay <log> <object_type> <inductive|alpha> [noise_threshold]".into());
+        return Err(
+            "usage: replay <log> <object_type> <inductive|powl|alpha> [noise_threshold]".into(),
+        );
     };
     let noise: f64 = args.next().map_or(Ok(0.0), |s| s.parse())?;
 
@@ -52,6 +54,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (
                 ocel_mine::tree_replay(&log, &object_type, &tree),
                 ocel_mine::tree_precision(&log, &object_type, &tree),
+            )
+        }
+        "powl" => {
+            let model = ocel_mine::powl(&log, &object_type, noise);
+            println!("powl: {model:?}");
+            (
+                ocel_mine::powl_replay(&log, &object_type, &model),
+                ocel_mine::powl_precision(&log, &object_type, &model),
             )
         }
         "alpha" => {

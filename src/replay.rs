@@ -50,7 +50,7 @@ pub struct ReplayReport {
 }
 
 /// (sequence, count, example object id) per distinct variant.
-fn collect_variants<'a>(traces: &trace::Traces<'a>) -> Vec<(Vec<u16>, usize, &'a str)> {
+pub(crate) fn collect_variants<'a>(traces: &trace::Traces<'a>) -> Vec<(Vec<u16>, usize, &'a str)> {
     let mut index: HashMap<Vec<u16>, usize> = HashMap::new();
     let mut variants: Vec<(Vec<u16>, usize, &str)> = Vec::new();
     for (slot, steps) in traces.steps.iter().enumerate() {
@@ -68,7 +68,7 @@ fn collect_variants<'a>(traces: &trace::Traces<'a>) -> Vec<(Vec<u16>, usize, &'a
     variants
 }
 
-fn report(
+pub(crate) fn report(
     object_type: &str,
     names: &[&str],
     variants: Vec<(Vec<u16>, usize, &str)>,

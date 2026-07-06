@@ -37,7 +37,7 @@ pub enum ProcessTree {
 }
 
 /// Sub-log: variant -> multiplicity (activities are interned ids).
-type Log = HashMap<Vec<u16>, usize>;
+pub(crate) type Log = HashMap<Vec<u16>, usize>;
 
 struct Miner<'a> {
     names: &'a [&'a str],
@@ -45,11 +45,11 @@ struct Miner<'a> {
 }
 
 /// Directly-follows abstraction of a sub-log.
-struct Graph {
-    alphabet: Vec<u16>,
-    follows: HashMap<(u16, u16), usize>,
-    starts: Vec<u16>,
-    ends: Vec<u16>,
+pub(crate) struct Graph {
+    pub(crate) alphabet: Vec<u16>,
+    pub(crate) follows: HashMap<(u16, u16), usize>,
+    pub(crate) starts: Vec<u16>,
+    pub(crate) ends: Vec<u16>,
 }
 
 /// Keep the ids whose count reaches `noise` × the strongest count.
@@ -67,7 +67,7 @@ fn frequent(counts: &HashMap<u16, usize>, noise: f64) -> Vec<u16> {
 }
 
 impl Graph {
-    fn build(log: &Log, noise_threshold: f64) -> Graph {
+    pub(crate) fn build(log: &Log, noise_threshold: f64) -> Graph {
         let mut follows: HashMap<(u16, u16), usize> = HashMap::new();
         let mut alphabet: Vec<u16> = Vec::new();
         let mut start_counts: HashMap<u16, usize> = HashMap::new();
@@ -108,12 +108,12 @@ impl Graph {
         }
     }
 
-    fn has(&self, a: u16, b: u16) -> bool {
+    pub(crate) fn has(&self, a: u16, b: u16) -> bool {
         self.follows.contains_key(&(a, b))
     }
 
     /// Connected components under `linked`; returns activity -> component id.
-    fn components(&self, linked: impl Fn(u16, u16) -> bool) -> HashMap<u16, usize> {
+    pub(crate) fn components(&self, linked: impl Fn(u16, u16) -> bool) -> HashMap<u16, usize> {
         let mut component: HashMap<u16, usize> = HashMap::new();
         let mut next = 0usize;
         for &seed in &self.alphabet {
@@ -136,7 +136,7 @@ impl Graph {
     }
 }
 
-fn count_groups(assignment: &HashMap<u16, usize>) -> usize {
+pub(crate) fn count_groups(assignment: &HashMap<u16, usize>) -> usize {
     let mut seen: Vec<usize> = assignment.values().copied().collect();
     seen.sort_unstable();
     seen.dedup();
@@ -430,7 +430,7 @@ impl Miner<'_> {
 }
 
 /// Pairwise reachability over the directly-follows relation.
-fn reachability(graph: &Graph) -> HashMap<(u16, u16), bool> {
+pub(crate) fn reachability(graph: &Graph) -> HashMap<(u16, u16), bool> {
     let n = graph.alphabet.len();
     let index: HashMap<u16, usize> = graph
         .alphabet
