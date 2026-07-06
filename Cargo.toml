@@ -1,12 +1,12 @@
 [package]
 name = "ocel-mine"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/katsut/ocel-mine"
 documentation = "https://docs.rs/ocel-mine"
 readme = "README.md"
-description = "Object-centric process mining for OCEL 2.0: variants, DFG/OC-DFG, discovery (alpha, inductive, heuristics), replay fitness, precision, lead times"
+description = "Object-centric process mining for OCEL 2.0: variants, DFG/OC-DFG, discovery (alpha, inductive, heuristics, POWL), replay fitness, precision, lead times"
 keywords = ["ocel", "process-mining", "event-log", "petri-net"]
 categories = ["science", "algorithms"]
 exclude = ["docs/"]
