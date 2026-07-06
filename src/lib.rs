@@ -11,6 +11,7 @@ pub mod dfg;
 pub mod heuristics;
 pub mod inductive;
 pub mod metrics;
+pub mod noise;
 pub mod powl;
 pub mod powl_replay;
 pub mod precision;
@@ -30,6 +31,7 @@ pub use heuristics::{
 };
 pub use inductive::{inductive, ProcessTree};
 pub use metrics::{lead_times, LeadTimeReport, ReworkMetric, VariantLead};
+pub use noise::{inject_noise, NoiseSpec};
 pub use powl::{powl, Powl};
 pub use powl_replay::{powl_precision, powl_replay};
 pub use precision::{net_precision, tree_precision, PrecisionReport};

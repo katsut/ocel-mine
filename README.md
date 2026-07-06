@@ -17,11 +17,21 @@ returned as warnings), the **inductive miner** (practical; sound by
 construction, once-per-trace fall-through before the flower, tunable
 `IMf`-style noise threshold), and the **heuristics miner** (noise-robust;
 dependency graph with tunable thresholds, PM4Py-compatible 5% pre-cleaning,
-dedicated length-1/length-2 loop measures) — and **replay fitness**:
-`tree_replay` decides exact language membership per variant (the miner's cuts
-partition the alphabet, so membership is ownership routing, not a token-game
-approximation), `net_replay` token-replays alpha nets, and the heuristics net
-reports how many observed direct successions its kept edges explain.
+dedicated length-1/length-2 loop measures), and the **POWL miner**
+(partial-order cuts that also express "A and B in either order, both before
+C"; frequency-dominant ordering under the same noise threshold) — plus the
+evaluators: **replay fitness** (`tree_replay` decides exact language
+membership per variant — the miner's cuts partition the alphabet, so
+membership is ownership routing, not a token-game approximation;
+`powl_replay` extends the routing to partial-order nodes; `net_replay`
+token-replays alpha nets; the heuristics net reports how many observed direct
+successions its kept edges explain), **ETC precision**
+(`tree_precision` / `powl_precision` / `net_precision`, escaping-edges,
+cross-checked against PM4Py), and a **noise-robustness harness**
+(`inject_noise` perturbs one type's traces with seeded swap / drop /
+duplicate noise; `examples/noise.rs` discovers on the noisy log and scores
+fitness and precision against the clean one, so miner and threshold choices
+rest on measured degradation curves instead of guesses).
 
 Discovery honesty notes: alpha cannot model self-loops (a self-looping
 activity joins no place and its transition fires freely — textbook behavior)
@@ -55,6 +65,8 @@ Or from the command line:
 ```sh
 cargo run --release --example variants -- order-management.sqlite orders
 cargo run --release --example dfg -- order-management.sqlite orders
+cargo run --release --example replay -- order-management.sqlite orders inductive 0.1
+cargo run --release --example noise -- order-management.sqlite orders
 ```
 
 ## Performance
