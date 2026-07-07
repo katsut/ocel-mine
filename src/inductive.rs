@@ -14,12 +14,12 @@
 use std::collections::HashMap;
 
 use ocel::Ocel;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::trace;
 
 /// A process tree node.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ProcessTree {
     /// A leaf activity.
@@ -606,6 +606,27 @@ mod tests {
                 children: vec![activity("a"), activity("b"), activity("c")]
             }
         );
+    }
+
+    #[test]
+    fn process_tree_round_trips_through_json() {
+        let tree = ProcessTree::Sequence {
+            children: vec![
+                activity("a"),
+                ProcessTree::Exclusive {
+                    children: vec![ProcessTree::Tau, activity("b")],
+                },
+                ProcessTree::Parallel {
+                    children: vec![activity("c"), activity("d")],
+                },
+                ProcessTree::Loop {
+                    children: vec![activity("e"), ProcessTree::Tau],
+                },
+            ],
+        };
+        let json = serde_json::to_string(&tree).expect("serialize");
+        let back: ProcessTree = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, tree);
     }
 
     #[test]

@@ -12,13 +12,13 @@
 use std::collections::HashMap;
 
 use ocel::Ocel;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::inductive::{count_groups, Graph, Log};
 use crate::trace;
 
 /// A POWL model node.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Powl {
     /// A leaf activity.
