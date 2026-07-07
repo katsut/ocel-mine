@@ -232,11 +232,12 @@ dependencies = [
 
 [[package]]
 name = "ocel-mine"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "ocel",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

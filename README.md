@@ -10,7 +10,10 @@ live in [ocel-studio](https://github.com/katsut/ocel-studio).
 
 ## Status
 
-Shipped: per-type trace variants, per-type DFG (frequency / distinct objects /
+Shipped: per-type trace variants (plus deterministic **variant clustering** —
+`variant_clusters` groups variants into behavioral families by cosine
+similarity over activity/bigram count vectors, centroid-linkage agglomerative,
+no ML), per-type DFG (frequency / distinct objects /
 gap statistics, start-end counts), the OC-DFG overlay, per-type model
 discovery — the **alpha algorithm** (educational; its textbook limits are
 returned as warnings), the **inductive miner** (practical; sound by
@@ -31,7 +34,9 @@ cross-checked against PM4Py), and a **noise-robustness harness**
 (`inject_noise` perturbs one type's traces with seeded swap / drop /
 duplicate noise; `examples/noise.rs` discovers on the noisy log and scores
 fitness and precision against the clean one, so miner and threshold choices
-rest on measured degradation curves instead of guesses).
+rest on measured degradation curves instead of guesses). The discovery model
+types (`ProcessTree`, `Powl`, `PetriNet`) also implement `Deserialize` and
+round-trip through JSON.
 
 Discovery honesty notes: alpha cannot model self-loops (a self-looping
 activity joins no place and its transition fires freely — textbook behavior)

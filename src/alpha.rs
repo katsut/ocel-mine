@@ -9,7 +9,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use ocel::Ocel;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::trace;
 
@@ -19,7 +19,7 @@ const MAX_ACTIVITIES: usize = 20;
 
 /// A place: incoming and outgoing transitions (empty inputs = source place,
 /// empty outputs = sink place).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Place {
     pub id: String,
@@ -28,7 +28,7 @@ pub struct Place {
 }
 
 /// The discovered Petri net of one object type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PetriNet {
     pub object_type: String,
@@ -290,5 +290,28 @@ mod tests {
         assert!(net.transitions.is_empty());
         // just source and sink, both empty
         assert_eq!(net.places.len(), 2);
+    }
+
+    #[test]
+    fn place_round_trips_through_json() {
+        let place = Place {
+            id: "p1".into(),
+            inputs: vec!["a".into()],
+            outputs: vec!["b".into(), "c".into()],
+        };
+        let json = serde_json::to_string(&place).expect("serialize");
+        let back: Place = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, place);
+    }
+
+    #[test]
+    fn petri_net_round_trips_through_json() {
+        // a mined net with places and a warning covers every field
+        let log = log_from_sequences(&[&["a", "b", "b", "c"], &["a", "c"]]);
+        let net = alpha(&log, "case");
+        assert!(!net.warnings.is_empty());
+        let json = serde_json::to_string(&net).expect("serialize");
+        let back: PetriNet = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, net);
     }
 }

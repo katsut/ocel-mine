@@ -212,3 +212,22 @@ fn noise_threshold_ignores_rare_swap() {
         }
     );
 }
+
+#[test]
+fn powl_round_trips_through_json() {
+    let model = Powl::PartialOrder {
+        children: vec![
+            activity("a"),
+            Powl::Exclusive {
+                children: vec![Powl::Tau, activity("b")],
+            },
+            Powl::Loop {
+                children: vec![activity("c"), Powl::Tau],
+            },
+        ],
+        order: vec![(0, 1), (1, 2)],
+    };
+    let json = serde_json::to_string(&model).expect("serialize");
+    let back: Powl = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(back, model);
+}

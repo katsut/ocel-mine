@@ -7,6 +7,7 @@
 
 pub mod alpha;
 pub mod cases;
+pub mod cluster;
 pub mod dfg;
 pub mod heuristics;
 pub mod inductive;
@@ -25,6 +26,7 @@ mod test_util;
 
 pub use alpha::{alpha, PetriNet, Place};
 pub use cases::{cases, CaseSummary};
+pub use cluster::{variant_clusters, Cluster, ClusterReport};
 pub use dfg::{dfg, oc_dfg, Dfg, DfgEdge, DfgNode, OcActivity, OcDfg, OcDfgEdge, OcTypeCount};
 pub use heuristics::{
     heuristics, HeuristicActivity, HeuristicEdge, HeuristicsNet, HeuristicsParams,
